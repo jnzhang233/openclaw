@@ -244,7 +244,7 @@ describe("dropThinkingBlocks keepRecentTurns option", () => {
     ];
 
     const result = dropThinkingBlocks(messages, {});
-    expect(result[0].content).toEqual([{ type: "thinking", thinking: "test" }]);
+    expect((result[0] as any).content).toEqual([{ type: "thinking", thinking: "test" }]);
   });
 
   it("uses reference equality when no changes needed", () => {
