@@ -700,7 +700,9 @@ export async function sanitizeSessionHistory(params: {
   const allowProviderOwnedThinkingReplay = shouldAllowProviderOwnedThinkingReplay({
     modelApi: params.modelApi,
     provider: params.provider,
+    modelId: params.modelId,
     policy,
+    config: params.config,
   });
   const isOpenAIResponsesApi =
     params.modelApi === "openai-responses" ||
@@ -757,8 +759,16 @@ export async function sanitizeSessionHistory(params: {
   const droppedReasoning = policy.dropReasoningFromHistory
     ? dropReasoningFromHistory(validatedThinkingSignatures)
     : validatedThinkingSignatures;
+  // Determine keepRecentTurns for thinking pruning (default: 1)
+  const thinkingConfig = params.config?.agents?.defaults?.contextPruning?.thinking;
+  const thinkingKeepRecentTurns =
+    thinkingConfig?.enabled &&
+    typeof thinkingConfig?.keepRecentTurns === "number" &&
+    thinkingConfig.keepRecentTurns > 0
+      ? thinkingConfig.keepRecentTurns
+      : 1;
   const droppedThinking = policy.dropThinkingBlocks
-    ? dropThinkingBlocks(droppedReasoning)
+    ? dropThinkingBlocks(droppedReasoning, { keepRecentTurns: thinkingKeepRecentTurns })
     : droppedReasoning;
   const sanitizedToolCalls = sanitizeToolCallInputs(droppedThinking, {
     allowedToolNames: params.allowedToolNames,

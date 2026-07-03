@@ -47,23 +47,70 @@ export function providerRequiresSignedThinking(provider?: string | null): boolea
   return SIGNED_THINKING_PROVIDERS.has(normalizeProviderId(provider ?? ""));
 }
 
-/** Decide whether signed thinking can be replayed under the current provider policy. */
+/**
+ * Decide whether signed thinking can be replayed under the current provider policy.
+ *
+ * Default behavior:
+ * - Anthropic Claude 4.5+ (Sonnet 4.5, Opus 4.x, Fable 5, etc.) always allow replay
+ *   to fix session continuity issues, regardless of dropThinkingBlocks.
+ * - Other Anthropic models respect the dropThinkingBlocks policy.
+ * - Non-Anthropic providers do not allow provider-owned thinking replay.
+ *
+ * User override via config: agents.defaults.contextPruning.anthropicThinkingReplay
+ *   - true: force enable for Anthropic models
+ *   - false: force disable
+ *   - undefined: use default logic described above
+ */
 export function shouldAllowProviderOwnedThinkingReplay(params: {
   modelApi?: string | null;
   provider?: string | null;
+  modelId?: string | null;
   policy: Pick<
     TranscriptPolicy,
     "validateAnthropicTurns" | "preserveSignatures" | "dropThinkingBlocks"
   >;
+  config?: OpenClawConfig;
 }): boolean {
+  // 1) User config override takes precedence
+  if (params.config) {
+    const cp = params.config.agents?.defaults?.contextPruning as
+      | { anthropicThinkingReplay?: boolean }
+      | undefined;
+    if (cp?.anthropicThinkingReplay !== undefined) {
+      return cp.anthropicThinkingReplay === true;
+    }
+  }
+
   const hasProviderOwnedSignedThinking =
     params.policy.preserveSignatures || providerRequiresSignedThinking(params.provider);
-  return (
-    isAnthropicApi(params.modelApi) &&
-    params.policy.validateAnthropicTurns &&
-    hasProviderOwnedSignedThinking &&
-    !params.policy.dropThinkingBlocks
-  );
+
+  // Base condition: Anthropic API with signed thinking support
+  if (!isAnthropicApi(params.modelApi) || !hasProviderOwnedSignedThinking) {
+    return false;
+  }
+
+  // For Claude 4.5+ models (Sonnet 4.5, Opus 4.x, Fable 5, etc.),
+  // always allow provider-owned thinking replay even if dropThinkingBlocks is set
+  const modelId = normalizeLowercaseStringOrEmpty(params.modelId);
+  const isClaude = modelId.includes("claude");
+  if (isClaude) {
+    // Models that natively preserve thinking blocks (Claude 4.5+):
+    if (
+      modelId.includes("fable-5") ||
+      modelId.includes("opus-4") ||
+      modelId.includes("sonnet-4") ||
+      modelId.includes("haiku-4") ||
+      /claude-[5-9]/.test(modelId) ||
+      /claude-\d{2,}/.test(modelId)
+    ) {
+      return true;
+    }
+    // For older Claude models, respect dropThinkingBlocks
+    return !params.policy.dropThinkingBlocks;
+  }
+
+  // Non-Claude Anthropic models: respect dropThinkingBlocks
+  return !params.policy.dropThinkingBlocks;
 }
 
 const DEFAULT_TRANSCRIPT_POLICY: TranscriptPolicy = {
@@ -363,5 +410,14 @@ export function resolveTranscriptPolicy(params: {
     }
     configCache.set(cacheKey, policy);
   }
+
+  // Apply contextPruning.thinking override for Anthropic models when enabled.
+  // This ensures the thinking pruning feature works without requiring
+  // overrideProviderStrategy to be manually set.
+  const thinkingConfig = params.config?.agents?.defaults?.contextPruning?.thinking;
+  if (provider === "anthropic" && thinkingConfig?.enabled) {
+    policy.dropThinkingBlocks = true;
+  }
+
   return policy;
 }

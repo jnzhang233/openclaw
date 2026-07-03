@@ -86,6 +86,20 @@ export type AgentContextPruningConfig = {
     /** Placeholder text inserted when a tool result is hard-cleared. */
     placeholder?: string;
   };
+  /** Override provider-owned thinking replay for Anthropic models.
+   * - true: always enable (default for Claude 4.5+)
+   * - false: always disable
+   * - undefined: use default logic (respects dropThinkingBlocks and model version)
+   */
+  anthropicThinkingReplay?: boolean;
+  /** Thinking block pruning configuration.
+   * - enabled: 是否启用思维块剪枝（默认 false）。启用后会删除旧的 thinking 块，仅保留最近 N 个 assistant turn。
+   * - keepRecentTurns: 保留的最新的 assistant turns 数量（默认 1）。仅在 enabled=true 时有效。
+   */
+  thinking?: {
+    enabled?: boolean;
+    keepRecentTurns?: number;
+  };
 };
 
 export type AgentStartupContextConfig = {

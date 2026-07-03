@@ -152,6 +152,23 @@ export const AgentDefaultsSchema = z
           })
           .strict()
           .optional(),
+        /** Override provider-owned thinking replay for Anthropic models.
+         * - true: always enable (default for Claude 4.5+)
+         * - false: always disable
+         * - undefined: use default logic (respects dropThinkingBlocks and model version)
+         */
+        anthropicThinkingReplay: z.boolean().optional(),
+        /** Thinking block pruning configuration (primarily for Anthropic models).
+         * - enabled: 是否启用思维块剪枝（默认 false）。启用后会删除旧的 thinking 块，仅保留最近 N 个 assistant turn。
+         * - keepRecentTurns: 保留的最新的 assistant turns 数量（默认 1）。仅在 enabled=true 时有效。
+         */
+        thinking: z
+          .object({
+            enabled: z.boolean().optional(),
+            keepRecentTurns: z.number().int().min(1).optional(),
+          })
+          .strict()
+          .optional(),
       })
       .strict()
       .optional(),
